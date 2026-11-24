@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server v cloudu | __INSTANCE_ID__</title>
+<style>
+  :root {
+    --bg: #0d1321; --panel: #151d2e; --panel2: #1c2740; --line: #2b3a5c;
+    --text: #e6ebf5; --muted: #8b98b8; --accent: #ff9f1c; --ok: #2ec4b6;
+    --vpc: #3a86ff; --subnet: #8338ec; --sg: #ff006e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; justify-content: space-between; }
+  h1 { font-size: clamp(26px, 4vw, 40px); margin: 0; letter-spacing: -0.02em; }
+  h1 .cloud { color: var(--accent); }
+  .status {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--panel);
+    font-family: ui-monospace, Menlo, monospace; font-size: 14px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(46,196,182,.7); } to { box-shadow: 0 0 0 10px rgba(46,196,182,0); } }
+  .lead { color: var(--muted); max-width: 720px; margin: 12px 0 0; }
+  h2 { font-size: 20px; margin: 40px 0 14px; }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card .k { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+  .card .v { font-family: ui-monospace, Menlo, monospace; font-size: 17px; margin-top: 4px; word-break: break-all; }
+  .card .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .card.big .v { color: var(--accent); font-size: 22px; }
+
+  /* architektura */
+  .box { border: 2px dashed var(--line); border-radius: 14px; padding: 12px 14px 16px; position: relative; }
+  .box > .label { font-family: ui-monospace, Menlo, monospace; font-size: 13px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .box > .label b { font-family: system-ui, sans-serif; font-size: 14px; }
+  .region { border-color: var(--muted); }
+  .vpc { border-color: var(--vpc); background: rgba(58,134,255,.05); }
+  .vpc > .label b { color: var(--vpc); }
+  .subnet { border-color: var(--subnet); background: rgba(131,56,236,.06); }
+  .subnet > .label b { color: var(--subnet); }
+  .sg { border-color: var(--sg); border-style: solid; background: rgba(255,0,110,.05); }
+  .sg > .label b { color: var(--sg); }
+  .ec2 {
+    background: var(--panel2); border: 1px solid var(--accent); border-radius: 12px; padding: 14px;
+    display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center;
+  }
+  .ec2 .icon { font-size: 34px; }
+  .ec2 code { color: var(--accent); }
+  .igw {
+    position: absolute; top: -14px; right: 18px; background: var(--bg); border: 2px solid var(--vpc);
+    border-radius: 8px; padding: 2px 10px; font-size: 13px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .pill { display: inline-block; border: 1px solid var(--sg); color: var(--text); border-radius: 6px; padding: 0 8px; font-size: 12px; margin-left: 4px; }
+
+  /* cesta požadavku */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .step { flex: 1 1 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; position: relative; }
+  .step .n { position: absolute; top: -10px; left: 10px; background: var(--accent); color: #111; font-weight: 700; border-radius: 999px; width: 22px; height: 22px; display: grid; place-items: center; font-size: 13px; }
+  .step .t { font-weight: 600; margin-top: 4px; }
+  .step .d { color: var(--muted); font-size: 14px; }
+  .step code { font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--panel2); font-size: 14px; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+
+  ol.tasks { padding-left: 0; list-style: none; counter-reset: t; display: grid; gap: 10px; }
+  ol.tasks li { counter-increment: t; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 12px 52px; position: relative; }
+  ol.tasks li::before { content: counter(t); position: absolute; left: 14px; top: 12px; width: 26px; height: 26px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-weight: 700; }
+  pre { background: #0a0f1a; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 8px 0 0; font-size: 13px; }
+  code { font-family: ui-monospace, Menlo, monospace; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin-top: 6px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Ahoj ze serveru v <span class="cloud">cloudu</span> ☁️</h1>
+    <span class="status"><span class="dot"></span> running · <span id="uptime">…</span></span>
+  </header>
+  <p class="lead">
+    Tuhle stránku ti posílá virtuální server (EC2 instance), který vytvořil Terraform jedním příkazem
+    <code>terraform apply</code>. Žádný cloud ale neplatíme: všechno běží lokálně v emulátoru
+    <b>Floci</b>, který se tváří jako AWS.
+  </p>
+
+  <h2>Kdo ti odpovídá <small>(údaje z Instance Metadata Service)</small></h2>
+  <div class="grid">
+    <div class="card big"><div class="k">Instance ID</div><div class="v">__INSTANCE_ID__</div><div class="hint">Jedinečné jméno serveru v AWS</div></div>
+    <div class="card"><div class="k">Typ instance</div><div class="v">__INSTANCE_TYPE__</div><div class="hint">Kolik CPU a RAM si „pronajímáme"</div></div>
+    <div class="card"><div class="k">Image (AMI)</div><div class="v">__AMI_ID__</div><div class="hint">Šablona operačního systému</div></div>
+    <div class="card"><div class="k">Region / zóna</div><div class="v">__REGION__ / __AZ__</div><div class="hint">Ve kterém „datacentru" server stojí</div></div>
+    <div class="card"><div class="k">Privátní IP</div><div class="v">__PRIVATE_IP__</div><div class="hint">Adresa uvnitř naší VPC</div></div>
+    <div class="card"><div class="k">Hostname</div><div class="v">__HOSTNAME__</div><div class="hint">Spuštěno __BOOT_TIME__ UTC</div></div>
+  </div>
+
+  <h2>Jak to celé vypadá <small>(co vytvořil Terraform)</small></h2>
+  <div class="box region">
+    <div class="label"><b>Region</b> __REGION__</div>
+    <div class="box vpc">
+      <span class="igw">🌐 Internet Gateway</span>
+      <div class="label"><b>VPC</b> ${vpc_id} · ${vpc_cidr}</div>
+      <div class="box subnet">
+        <div class="label"><b>Public subnet</b> ${subnet_id} · ${subnet_cidr} · __AZ__</div>
+        <div class="box sg">
+          <div class="label"><b>Security group</b> ${sg_id} <span>povoleno:<span class="pill">22 SSH</span><span class="pill">8080 HTTP</span></span></div>
+          <div class="ec2">
+            <span class="icon">🖥️</span>
+            <div><div><b>EC2 instance</b> <code>__INSTANCE_ID__</code></div>
+              <div style="color:var(--muted);font-size:14px">__INSTANCE_TYPE__ · __PRIVATE_IP__ · python3 http.server na portu 8080</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Cesta tvého požadavku sem</h2>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><div class="t">💻 Tvůj prohlížeč</div><div class="d">pošle HTTP GET na <code>localhost:30000</code></div></div>
+    <div class="step"><span class="n">2</span><div class="t">🔁 Port forward</div><div class="d">Floci kvůli pravidlu v security group spustilo <code>socat</code>, který port přeposílá</div></div>
+    <div class="step"><span class="n">3</span><div class="t">📦 „EC2" kontejner</div><div class="d">dorazí na <code>__PRIVATE_IP__:8080</code></div></div>
+    <div class="step"><span class="n">4</span><div class="t">🐍 Webový server</div><div class="d">Python vrátí soubor <code>/srv/www/index.html</code>, tedy tuhle stránku</div></div>
+  </div>
+
+  <h2>Floci vs. skutečné AWS</h2>
+  <table>
+    <tr><th>Věc</th><th>Ve skutečném AWS</th><th>Tady ve Floci</th></tr>
+    <tr><td>EC2 instance</td><td>Virtuální stroj v datacentru Amazonu</td><td>Docker kontejner na tvém počítači</td></tr>
+    <tr><td>AMI</td><td>Disk s nainstalovaným OS</td><td>Docker image (tady Ubuntu 24.04)</td></tr>
+    <tr><td>VPC, subnet, IGW</td><td>Skutečná izolovaná síť a směrování</td><td>Hlavně záznamy, aby Terraform fungoval stejně</td></tr>
+    <tr><td>Security group</td><td>Firewall, který filtruje provoz</td><td>Určuje, které porty se zpřístupní (filtrování jde zapnout)</td></tr>
+    <tr><td>Veřejná IP</td><td>Adresa dostupná z internetu</td><td><code>localhost</code> + přidělený port</td></tr>
+    <tr><td>Cena</td><td>Platí se za každou hodinu běhu</td><td>Zdarma 🎉</td></tr>
+  </table>
+
+  <h2>Úkoly pro tebe 🧪</h2>
+  <ol class="tasks">
+    <li><b>Přihlas se na server přes SSH.</b>
+      <pre>ssh -i demo-key.pem -p 2200 root@localhost</pre></li>
+    <li><b>Zeptej se serveru, kdo je.</b> Každá EC2 instance má speciální adresu <code>169.254.169.254</code>, na které zjistí informace o sobě. Právě odtud jsou údaje nahoře.
+      <pre>TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "x-aws-ec2-metadata-token-ttl-seconds: 60")
+curl -s -H "x-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id</pre>
+      <details><summary>Nápověda</summary>Zkus místo <code>instance-id</code> třeba <code>instance-type</code> nebo <code>placement/availability-zone</code>.</details></li>
+    <li><b>Změň tuhle stránku.</b> Na serveru uprav nadpis a obnov prohlížeč.
+      <pre>sed -i 's/Ahoj ze serveru/Ahoj od [tvoje jméno]/' /srv/www/index.html</pre></li>
+    <li><b>Zboř a postav znovu.</b> Spusť <code>terraform destroy</code> a pak <code>terraform apply</code>. Změnilo se Instance ID? Proč?
+      <details><summary>Odpověď</summary>Ano. Každá nová instance dostane nové ID. Infrastruktura jako kód znamená, že server umíme kdykoli zahodit a vytvořit stejný znovu.</details></li>
+  </ol>
+
+  <footer>
+    Postaveno pomocí <b>Terraform</b> + <b>Floci</b> (lokální emulátor AWS) · stránku vygeneroval skript v <code>user_data</code> při startu serveru.
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var boot = Number("__BOOT_EPOCH__");
+    var el = document.getElementById("uptime");
+    if (!boot) { el.textContent = "uptime ?"; return; }
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function tick() {
+      var s = Math.max(0, Math.floor(Date.now() / 1000) - boot);
+      var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      el.textContent = "uptime " + pad(h) + ":" + pad(m) + ":" + pad(s % 60);
+    }
+    tick(); setInterval(tick, 1000);
+  })();
+</script>
+</body>
+</html>

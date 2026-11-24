@@ -1,0 +1,31 @@
+#!/bin/bash
+# Spouští se jednou při startu instance (EC2 user_data).
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y python3 curl
+
+# Stránka připravená Terraformem (gzip + base64 kvůli limitu 16 KB na user_data)
+mkdir -p /srv/www
+echo "${index_html_gz}" | base64 -d | gunzip > /srv/www/index.html
+
+# Údaje o instanci z Instance Metadata Service (IMDSv2)
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "x-aws-ec2-metadata-token-ttl-seconds: 300")
+md() {
+  curl -s -H "x-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1"
+}
+
+sed -i \
+  -e "s|__INSTANCE_ID__|$(md instance-id)|g" \
+  -e "s|__INSTANCE_TYPE__|$(md instance-type)|g" \
+  -e "s|__AMI_ID__|$(md ami-id)|g" \
+  -e "s|__AZ__|$(md placement/availability-zone)|g" \
+  -e "s|__REGION__|$(md placement/region)|g" \
+  -e "s|__PRIVATE_IP__|$(md local-ipv4)|g" \
+  -e "s|__HOSTNAME__|$(cat /etc/hostname)|g" \
+  -e "s|__BOOT_EPOCH__|$(date +%s)|g" \
+  -e "s|__BOOT_TIME__|$(date -u '+%d. %m. %Y %H:%M')|g" \
+  /srv/www/index.html
+
+# Port 80 v kontejneru drží IMDS proxy, proto web běží na 8080
+cd /srv/www && nohup python3 -m http.server 8080 --bind 0.0.0.0 >/var/log/web.log 2>&1 &
